@@ -1,24 +1,23 @@
 <!doctype html>
-<!-- SOLMARA HEAT — an open-world crime game in the spirit of GTA 6. -->
-<!-- A sun-soaked coastal city to explore on foot and by car: traffic and pedestrians, -->
-<!-- cars to steal, a wanted level with police, missions and a story, combat, a HUD with -->
-<!-- a minimap, a start screen and a save. Everything here is original: the city, the -->
-<!-- characters, the names, the art and the sound. No Rockstar material of any kind. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Solmara Heat — Open-World Crime Game</title>
+<link rel="icon" href="data:,">
+<title>Port Verano — A Sunset City Story</title>
 <style>
-  html, body { margin: 0; padding: 0; background: #1a1208; height: 100%; overflow: hidden; }
-  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
-  canvas { display: block; background: #241a10; }
-  #status { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #14161c; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #err { position: fixed; left: 8px; bottom: 8px; z-index: 10; display: none; max-width: 90vw;
+         background: rgba(120, 0, 0, 0.9); color: #fff; font: 13px monospace;
+         padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="game" width="1280" height="720"></canvas></div>
-<div id="status" role="status" aria-live="polite"></div>
+<canvas id="game" aria-label="Port Verano: an open-world crime game. Drive, steal cars, outrun the police and finish six story missions."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="err"></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
