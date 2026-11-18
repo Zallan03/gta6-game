@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- SOLMARA HEAT — an open-world crime game in the spirit of GTA 6. -->
+<!-- A sun-soaked coastal city to explore on foot and by car: traffic and pedestrians, -->
+<!-- cars to steal, a wanted level with police, missions and a story, combat, a HUD with -->
+<!-- a minimap, a start screen and a save. Everything here is original: the city, the -->
+<!-- characters, the names, the art and the sound. No Rockstar material of any kind. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmara Heat — Open-World Crime Game</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #1a1208; height: 100%; overflow: hidden; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; background: #241a10; }
+  #status { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="1280" height="720"></canvas></div>
+<div id="status" role="status" aria-live="polite"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
