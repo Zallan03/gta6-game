@@ -1,90 +1,117 @@
-// Solmara Heat — every tuning number and colour in one place.
-//
-// The city is a fixed 3072x3072 world and the renderer shows a 1280x720
-// window of it, so no rule here depends on the screen size.
-export const WORLD = { size: 3072, beachY: 2848, waterY: 2976 };
-export const ROAD = { pitch: 320, half: 34, lines: [160, 480, 800, 1120, 1440, 1760, 2080, 2400, 2720] };
-export const STEP = 1 / 60;
+// Port Verano — tuning, palette and world constants.
+// Every number here was chosen for this game: a golden-hour coastal city
+// that feels fast on the road and readable on foot.
 
-export const PLAYER = {
-  radius: 13,
-  walkSpeed: 210,
-  sprintSpeed: 330,
-  health: 100,
-  armor: 50,
-  punchDamage: 12,
-  punchRange: 34,
-  punchRate: 0.38,
+export const WORLD = {
+  width: 3200,
+  height: 2400,
+  roadWidth: 46,
+  sidewalk: 14,
+  // Vertical road centre lines, west to east.
+  roadsV: [180, 460, 740, 1020, 1300, 1580, 1860, 2140, 2420, 2700],
+  // Horizontal road centre lines, north to south.
+  roadsH: [160, 440, 720, 1000, 1280, 1560, 1840, 2120],
+  // Ocean on the south and east edges, beach in front of it.
+  waterEast: 2920,
+  waterSouth: 2260,
+  beachSouth: 2180,
+  beachEast: 2860,
 };
-
-export const CAR = {
-  length: 46,
-  width: 22,
-  accel: 430,
-  brake: 700,
-  reverseMax: 210,
-  drag: 0.55,
-  grip: 6.5,
-  steerMax: 0.55,
-  health: 100,
-  jackTime: 0.9,
-};
-
-// kind -> { top speed, accel factor, colours the model spawns in }
-export const CAR_MODELS = {
-  sedan: { top: 470, accel: 1.0, colors: ['#c0392b', '#2e86c1', '#7d8a96', '#d4ac0d'] },
-  coupe: { top: 560, accel: 1.15, colors: ['#e74c3c', '#f39c12', '#8e44ad', '#16a085'] },
-  taxi: { top: 460, accel: 0.95, colors: ['#f1c40f'] },
-  truck: { top: 380, accel: 0.8, colors: ['#5d6d7e', '#935116', '#1e8449'] },
-  police: { top: 590, accel: 1.25, colors: ['#1c2733'] },
-  van: { top: 420, accel: 0.9, colors: ['#aab7b8', '#2c3e50'] },
-  beach: { top: 440, accel: 0.9, colors: ['#ff8fb3', '#7fe3d0'] },
-};
-
-export const TRAFFIC = { cars: 26, peds: 42, pedSpeed: 55 };
-
-export const WANTED = {
-  max: 5,
-  decayDelay: 14, // seconds hidden before stars start falling
-  decayInterval: 9, // seconds per star lost while hidden
-  // police cars chasing per star level (index = stars)
-  chaseCars: [0, 1, 2, 3, 4, 5],
-  // foot cops near the player per star level
-  footCops: [0, 1, 2, 3, 4, 6],
-  bustSeconds: 2.2, // a cop this close on foot for this long busts the player
-  bustRange: 46,
-};
-
-export const MISSION_CASH = { m1: 250, m2: 400, m3: 600, m4: 5000 };
-export const SAVE_KEY = 'solmara-heat.save.v1';
-export const BEST_KEY = 'solmara-heat.best.v1';
 
 export const PALETTE = {
-  grass: '#7fae5a',
-  grassDry: '#a8b060',
+  grass: '#7fae62',
+  grassDark: '#6f9e54',
   sand: '#e8d29a',
-  water: '#2e86ab',
-  waterDeep: '#1d5f7d',
-  road: '#3d3a38',
-  roadEdge: '#2c2927',
-  lane: '#e8d44d',
-  sidewalk: '#9a938a',
-  crosswalk: '#e8e4da',
-  buildingRoof: ['#b5673f', '#8a6d4b', '#6e7f80', '#a0522d', '#7a5c7e', '#4a6b8a', '#c08050'],
-  buildingWall: '#5c4a3a',
-  parkTree: '#3f7d3a',
-  parkTree2: '#5a9a42',
-  player: '#f2f2f2',
-  playerJacket: '#e74c3c',
-  cop: '#1c2733',
-  copHat: '#101820',
-  hudPanel: 'rgba(12, 10, 8, 0.72)',
-  hudText: '#f5efe4',
-  hudGold: '#f5c542',
-  minimapWater: '#2e86ab',
-  sunset: 'rgba(255, 150, 60, 0.10)',
-  night: 'rgba(20, 30, 80, 0.14)',
+  water: '#2f7fb8',
+  waterDeep: '#256b9e',
+  asphalt: '#3c3f46',
+  asphaltLine: '#e8c95a',
+  sidewalk: '#b9b3a4',
+  curb: '#8f887a',
+  park: '#5d9b4e',
+  plaza: '#c9bfa8',
+  // Roof colours by district flavour.
+  roofDowntown: ['#5a6b7d', '#6d7f92', '#4e5d6e', '#7a6a58'],
+  roofOldTown: ['#c96f4a', '#d99a55', '#b85c5c', '#d9b45b', '#8fae7e'],
+  roofMarina: ['#e8e0cc', '#c9d6de', '#d9a06b'],
+  roofDocks: ['#8a8f96', '#7a7f88', '#9aa0a8'],
+  roofHills: ['#b8624f', '#c98a4a', '#7e9a6a'],
+  buildingEdge: 'rgba(0,0,0,0.28)',
+  shadow: 'rgba(20,16,8,0.30)',
+  tree: '#3f7d3a',
+  treeLight: '#57a04c',
 };
 
-export const FONT = '"Trebuchet MS", "Segoe UI", system-ui, sans-serif';
-export const FONT_DISPLAY = '"Arial Black", "Trebuchet MS", sans-serif';
+export const DISTRICTS = [
+  { name: 'Old Town', x: 0, y: 0, w: 1020, h: 1000, flavour: 'oldtown' },
+  { name: 'Downtown', x: 1020, y: 440, w: 1120, h: 1120, flavour: 'downtown' },
+  { name: 'The Docks', x: 2420, y: 0, w: 500, h: 1000, flavour: 'docks' },
+  { name: 'Marina', x: 1860, y: 1560, w: 1060, h: 700, flavour: 'marina' },
+  { name: 'Beachfront', x: 0, y: 1840, w: 2920, h: 420, flavour: 'beach' },
+  { name: 'The Hills', x: 0, y: 0, w: 3200, h: 160, flavour: 'hills' },
+];
+
+export const PLAYER = {
+  walkSpeed: 175,
+  sprintSpeed: 265,
+  radius: 13,
+  maxHealth: 100,
+  punchDamage: 25,
+  punchRange: 46,
+  pistolDamage: 34,
+  pistolRange: 430,
+  fireInterval: 0.24,
+  startMoney: 120,
+};
+
+export const CARS = {
+  sedan: { accel: 330, maxSpeed: 430, grip: 7.5, length: 46, width: 22, health: 100 },
+  sport: { accel: 430, maxSpeed: 580, grip: 8.5, length: 48, width: 22, health: 90 },
+  taxi: { accel: 320, maxSpeed: 410, grip: 7.5, length: 46, width: 22, health: 100 },
+  van: { accel: 250, maxSpeed: 350, grip: 6.5, length: 54, width: 24, health: 130 },
+  truck: { accel: 210, maxSpeed: 310, grip: 6.0, length: 62, width: 26, health: 160 },
+  police: { accel: 400, maxSpeed: 540, grip: 8.5, length: 48, width: 22, health: 120 },
+};
+
+export const CAR_COLORS = {
+  sedan: ['#c94f42', '#4a7fb5', '#d9d9d9', '#3f5a46', '#b5892e', '#7a6a9e'],
+  sport: ['#e8722a', '#f2c230', '#1fa37c', '#d93862', '#2a6fd4'],
+  taxi: ['#f2c230'],
+  van: ['#8a8f96', '#a86a4a', '#5a7d8a'],
+  truck: ['#6b7280', '#9a7b4f'],
+  police: ['#f2f2f2'],
+};
+
+export const WANTED = {
+  // Heat added by each crime.
+  stealCar: 22,
+  hitPed: 30,
+  hitPolice: 26,
+  punchPed: 16,
+  shootPed: 30,
+  // Heat per second while unseen by any police.
+  decayPerSecond: 2.2,
+  // Police can spot the player this far away.
+  sightRange: 560,
+  // How many cruisers per star level.
+  cruisersPerStar: [0, 2, 3, 4, 6, 8],
+};
+
+export const MISSIONS = {
+  taxiFareMin: 40,
+  taxiFareMax: 90,
+  stashValue: 150,
+  stashCount: 8,
+};
+
+export const KEYS = {
+  up: ['KeyW', 'ArrowUp'],
+  down: ['KeyS', 'ArrowDown'],
+  left: ['KeyA', 'ArrowLeft'],
+  right: ['KeyD', 'ArrowRight'],
+  sprint: ['ShiftLeft', 'ShiftRight'],
+  enter: ['KeyE'],
+  punch: ['KeyF'],
+  pause: ['Escape', 'KeyP'],
+  mute: ['KeyM'],
+};

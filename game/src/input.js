@@ -1,90 +1,70 @@
-// Keyboard and mouse, translated into game terms. The world only ever sees
-// this plain input object — and the screenshot autopilot writes the same
-// shape, so a staged scene plays by the real rules.
-export const ACTION_CONFIRM = 'confirm';
-export const ACTION_PAUSE = 'pause';
-export const ACTION_MUTE = 'mute';
+// Port Verano — keyboard and mouse state with edge detection, so a tap of
+// E or F fires once instead of every frame it is held.
 
-const KEYMAP = {
-  KeyW: 'up', ArrowUp: 'up',
-  KeyS: 'down', ArrowDown: 'down',
-  KeyA: 'left', ArrowLeft: 'left',
-  KeyD: 'right', ArrowRight: 'right',
-  ShiftLeft: 'sprint', ShiftRight: 'sprint',
-  KeyE: 'enter',
-  KeyF: 'punch',
-  Space: 'shoot',
-};
+import { KEYS } from './config.js';
 
 export function createInput(canvas) {
   const input = {
-    up: false, down: false, left: false, right: false,
-    sprint: false, enter: false, punch: false, shoot: false,
-    mouseDown: false, mouseX: 0, mouseY: 0,
-    aimX: 0, aimY: 0,
+    down: new Set(),
     pressed: new Set(),
+    mouseX: 0,
+    mouseY: 0,
+    mouseDown: false,
+    mousePressed: false,
   };
 
-  function onKeyDown(event) {
-    const action = KEYMAP[event.code];
-    if (action) {
-      input[action] = true;
-      input.pressed.add(action);
-      if (action === 'shoot') event.preventDefault();
+  function codeOf(e) {
+    return e.code;
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+      e.preventDefault();
     }
-    if (event.code === 'Enter') input.pressed.add(ACTION_CONFIRM);
-    if (event.code === 'KeyP' || event.code === 'Escape') input.pressed.add(ACTION_PAUSE);
-    if (event.code === 'KeyM') input.pressed.add(ACTION_MUTE);
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
-  }
+    if (!input.down.has(e.code)) input.pressed.add(e.code);
+    input.down.add(e.code);
+  });
+  window.addEventListener('keyup', (e) => {
+    input.down.delete(e.code);
+  });
+  window.addEventListener('blur', () => {
+    input.down.clear();
+  });
 
-  function onKeyUp(event) {
-    const action = KEYMAP[event.code];
-    if (action) input[action] = false;
-  }
-
-  function onMouseMove(event) {
+  canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    input.mouseX = event.clientX - rect.left;
-    input.mouseY = event.clientY - rect.top;
-  }
+    input.mouseX = e.clientX - rect.left;
+    input.mouseY = e.clientY - rect.top;
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+      input.mouseDown = true;
+      input.mousePressed = true;
+    }
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) input.mouseDown = false;
+  });
 
-  function onMouseDown(event) {
-    onMouseMove(event);
-    input.mouseDown = true;
-    input.shoot = true;
-  }
+  input.isDown = function isDown(action) {
+    const codes = KEYS[action] || [];
+    return codes.some((c) => input.down.has(c));
+  };
 
-  function onMouseUp() {
-    input.mouseDown = false;
-    input.shoot = false;
-  }
+  input.wasPressed = function wasPressed(action) {
+    const codes = KEYS[action] || [];
+    return codes.some((c) => input.pressed.has(c));
+  };
 
-  window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('keyup', onKeyUp);
-  canvas.addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('mousedown', onMouseDown);
-  window.addEventListener('mouseup', onMouseUp);
-  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+  input.axis = function axis(negAction, posAction) {
+    return (input.isDown(posAction) ? 1 : 0) - (input.isDown(negAction) ? 1 : 0);
+  };
 
-  // True once for each press since the last frame; cleared by endFrame.
-  input.wasPressed = (action) => input.pressed.has(action);
-  input.endFrame = () => {
+  // Call at the end of each frame: edges live for exactly one frame.
+  input.endFrame = function endFrame() {
     input.pressed.clear();
-    input.enter = false;
-    input.punch = false;
+    input.mousePressed = false;
   };
-  return input;
-}
 
-// A scripted input for the screenshot scenes: the autopilot writes it.
-export function createScriptedInput() {
-  return {
-    up: false, down: false, left: false, right: false,
-    sprint: false, enter: false, punch: false, shoot: false,
-    mouseDown: false, mouseX: 0, mouseY: 0, aimX: 0, aimY: 0,
-    pressed: new Set(),
-    wasPressed: () => false,
-    endFrame: () => {},
-  };
+  return input;
 }

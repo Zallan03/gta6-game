@@ -1,193 +1,170 @@
-// The screenshot scenes behind ?shot=start|drive|chase|heist. Each one plays
-// the real rules forward from a fresh world for a fixed number of steps,
-// steered by a simple autopilot (drive toward waypoints, or run and shoot on
-// foot), so the frame is what a short game really looks like — and the same
-// seed always gives the same frame.
-import { STEP } from './config.js';
-import { EVENT_OVER } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { createScriptedInput } from './input.js';
-import { angleDiff } from './random.js';
+// Port Verano — screenshot scenes. Each scene plays the real rules forward
+// from a fresh world for a fixed number of steps, steered by a small
+// autopilot, so the frame is what a short stretch of real play looks like
+// and the same seed always gives the same frame. ?shot=chase|drive|foot|
+// mission, with ?seed= to vary the city.
 
-const START_SECONDS = 5;
-const DRIVE_SECONDS = 3.5;
-const CHASE_SECONDS = 6;
-const HEIST_SECONDS = 8;
-const SAMPLE = STEP;
+import { PLACES, nearestRoadPoint } from './city.js';
+import { makeCar } from './vehicles.js';
+import { startMission } from './missions.js';
+import { clamp, angleDiff } from './rng.js';
 
-// Steer a car toward the current waypoint; returns the next waypoint index.
-function steerCarTo(state, input, waypoints, index) {
-  const player = state.player;
-  const car = state.cars.find((c) => c.id === player.inCar);
-  if (!car || index >= waypoints.length) {
-    input.up = false; input.down = false; input.left = false; input.right = false; input.sprint = false;
-    return index;
-  }
-  const ap = input._ap ?? (input._ap = { stuckT: 0, mode: 'drive', modeT: 0 });
-  const wp = waypoints[index];
-  const dx = wp.x - car.x;
-  const dy = wp.y - car.y;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 60) return index + 1;
-  const desired = Math.atan2(dy, dx);
-  const diff = angleDiff(car.angle, desired);
-  // Stuck against a wall: rock out — reverse briefly, then drive off.
-  if (Math.abs(car.speed) < 20 && dist > 80) ap.stuckT += STEP;
-  else ap.stuckT = 0;
-  if (ap.stuckT > 0.8) {
-    ap.stuckT = 0;
-    ap.mode = ap.mode === 'drive' ? 'reverse' : 'drive';
-    ap.modeT = 0.8;
-  }
-  if (ap.modeT > 0) ap.modeT -= STEP;
-  else if (Math.abs(diff) > 2.4) { ap.mode = 'reverse'; ap.modeT = 0.9; }
-  else ap.mode = 'drive';
-  if (ap.mode === 'reverse') {
-    // Nose pointing the wrong way: back out while swinging round.
-    input.up = false;
-    input.down = true;
-    input.left = diff > 0.12;
-    input.right = diff < -0.12;
-    input.sprint = false;
+const STEP = 1 / 60;
+
+// Steer down the road the car is already on: aim at a point 380 ahead
+// along its own road, so the car holds its lane instead of cutting
+// corners across blocks.
+function driveToward(state) {
+  const car = state.player.car;
+  if (!car) return { throttle: 0, steer: 0 };
+  const spot = nearestRoadPoint(car.x, car.y);
+  let dir;
+  if (spot.road === 'v') dir = Math.sin(car.angle) >= 0 ? 1 : -1;
+  else dir = Math.cos(car.angle) >= 0 ? 1 : -1;
+  // Hold the right-hand lane, like the traffic does.
+  const lane = spot.road === 'v' ? (dir === 1 ? -11 : 11) : (dir === 1 ? 11 : -11);
+  let tx;
+  let ty;
+  if (spot.road === 'v') {
+    tx = spot.line + lane;
+    ty = car.y + dir * 380;
   } else {
-    input.left = diff > 0.12;
-    input.right = diff < -0.12;
-    if (Math.abs(diff) > 0.3 && Math.abs(car.speed) > 120) {
-      // Brake for the corner: a 90-degree turn at full speed cannot stay on the road.
-      input.up = false;
-      input.down = true;
-    } else {
-      input.up = true;
-      input.down = false;
-    }
-    input.sprint = Math.abs(diff) < 0.25;
+    tx = car.x + dir * 380;
+    ty = spot.line + lane;
   }
-  return index;
+  // A car right ahead in my lane: swing out to pass it.
+  for (const other of state.cars) {
+    if (other === car || other.dead) continue;
+    const dx = other.x - car.x;
+    const dy = other.y - car.y;
+    const ahead = dx * Math.cos(car.angle) + dy * Math.sin(car.angle);
+    const side = -dx * Math.sin(car.angle) + dy * Math.cos(car.angle);
+    if (ahead > 0 && ahead < 120 && Math.abs(side) < 26) {
+      tx += -Math.sin(car.angle) * 42;
+      ty += Math.cos(car.angle) * 42;
+      break;
+    }
+  }
+  const want = Math.atan2(ty - car.y, tx - car.x);
+  const steer = clamp(angleDiff(car.angle, want) * 2.4, -1, 1);
+  return { throttle: 1, steer };
 }
 
-// Walk toward a point in screen axes; returns true when there.
-function walkTo(state, input, x, y) {
+// A fake input object shaped like the real one, driven by the autopilot.
+function autoInput(state, shot) {
+  const input = {
+    down: new Set(),
+    pressed: new Set(),
+    mouseX: 0,
+    mouseY: 0,
+    mouseDown: false,
+    mousePressed: false,
+    isDown: () => false,
+    wasPressed: () => false,
+    axis: () => 0,
+    endFrame: () => {},
+  };
   const p = state.player;
-  const dx = x - p.x;
-  const dy = y - p.y;
-  input.up = dy < -12;
-  input.down = dy > 12;
-  input.left = dx < -12;
-  input.right = dx > 12;
-  input.sprint = Math.hypot(dx, dy) > 160;
-  return Math.hypot(dx, dy) < 30;
-}
-
-function seatPlayer(world, car) {
-  const p = world.state.player;
-  car.driver = 'player';
-  p.inCar = car.id;
-  p.x = car.x;
-  p.y = car.y;
-  p.angle = car.angle;
-}
-
-// Set `world` to the named scene (start, drive, chase or heist; any other
-// name is start) and return the screen to draw over it and the best haul.
-export function stageShot(name, world) {
-  const state = world.state;
-  world.reset();
-  const input = createScriptedInput();
-  if (name !== 'drive' && name !== 'chase' && name !== 'heist') {
-    for (let i = 0; i < START_SECONDS / SAMPLE; i += 1) world.step(SAMPLE, input);
-    return { screen: SCREEN_TITLE, best: 0 };
-  }
-
-  if (name === 'drive') {
-    // Mission 1: the coupe, driven home up the long north avenue — a straight
-    // run past downtown, the bank and the mall, with traffic to weave through.
-    const coupe = state.cars.find((c) => c.owner === 'mission');
-    coupe.x = 480;
-    coupe.y = 2400;
-    coupe.angle = -Math.PI / 2;
-    coupe.speed = 0;
-    seatPlayer(world, coupe);
-    // The garage step is already done: this is the drive home.
-    state.stepIndex = 1;
-    state.message = '';
-    state.messageT = 0;
-    state.cash = 150;
-    state.player.ammo = 24;
-    state.player.weapon = 'pistol';
-    const waypoints = [
-      { x: 480, y: 2080 },
-      { x: 480, y: 1760 },
-      { x: 480, y: 1440 },
-      { x: 480, y: 1120 },
-      { x: 480, y: 800 },
-      { x: 480, y: 480 },
-    ];
-    let wp = 0;
-    for (let i = 0; i < DRIVE_SECONDS / SAMPLE; i += 1) {
-      wp = steerCarTo(state, input, waypoints, wp);
-      if (world.step(SAMPLE, input) & EVENT_OVER) break;
-      input.enter = false;
+  if (shot === 'chase' || shot === 'drive') {
+    const car = p.car;
+    if (car) {
+      const d = driveToward(state);
+      input.axis = (neg, pos) => {
+        if (pos === 'up') return d.throttle;
+        if (neg === 'left' && pos === 'right') return d.steer;
+        return 0;
+      };
     }
-    return { screen: state.over ? SCREEN_OVER : SCREEN_PLAY, best: state.cash };
+  } else if (shot === 'foot') {
+    const tx = PLACES.garage.x;
+    const ty = PLACES.garage.y;
+    const dx = tx - p.x;
+    const dy = ty - p.y;
+    input.axis = (neg, pos) => {
+      if (pos === 'right') return dx > 12 ? 1 : 0;
+      if (neg === 'left') return dx < -12 ? 1 : 0;
+      if (pos === 'down') return dy > 12 ? 1 : 0;
+      if (neg === 'up') return dy < -12 ? 1 : 0;
+      return 0;
+    };
   }
+  return input;
+}
 
-  if (name === 'chase') {
-    // Mission 2 in progress: three stars, the whole force behind the player.
-    state.missionIndex = 1;
-    state.stepIndex = 1;
-    state.stealBase = state.stats.stolen;
-    state.cash = 1250;
-    const car = world.giveCar('coupe', 1440, 800, Math.PI / 2);
-    seatPlayer(world, car);
+function autoMouse(state, shot) {
+  const p = state.player;
+  if (shot === 'mission') {
+    const alive = state.enemies.find((e) => e.health > 0);
+    if (alive) return { x: alive.x, y: alive.y, fire: true };
+  }
+  if (shot === 'foot') return { x: PLACES.garage.x, y: PLACES.garage.y, fire: false };
+  if (p.car) return { x: p.x + Math.cos(p.angle) * 200, y: p.y + Math.sin(p.angle) * 200, fire: false };
+  return { x: p.x + 100, y: p.y, fire: false };
+}
+
+export function stageShot(name, state, stepWorld) {
+  const shot = ['chase', 'drive', 'foot', 'mission'].includes(name) ? name : 'chase';
+  state.shot = shot;
+
+  if (shot === 'chase') {
+    startMission(state, 3);
+    // Mara in a sport car, mid-avenue downtown, three stars already on her.
+    // A long straight east along y=1000, so the chase never reaches the shore.
+    const car = makeCar(300, 1000, 0, 'sport', 'player');
+    car.color = '#e8722a';
+    state.player.car = car;
+    state.player.onFoot = false;
+    state.player.x = car.x;
+    state.player.y = car.y;
+    state.cars.push(car);
+    car.speed = 320;
+    // Two cruisers already on her tail, in frame, so the chase reads.
+    for (const [ox, oy] of [[-260, -24], [-330, 30]]) {
+      const cop = makeCar(car.x + ox, car.y + oy, 0, 'police', 'police');
+      cop.siren = true;
+      cop.speed = 380;
+      state.cars.push(cop);
+    }
+    for (let i = 0; i < 200; i += 1) stepWorld(state, STEP, autoInput(state, shot), autoMouse(state, shot));
+    state.msg = { text: 'WANTED LEVEL 3', sub: 'Lose the cops', until: state.time + 10 };
+  } else if (shot === 'drive') {
+    startMission(state, 1);
+    // A long straight east along y=1840, through the Marina district.
+    const car = makeCar(300, 1840, 0, 'sedan', 'player');
+    car.color = '#4a7fb5';
+    state.player.car = car;
+    state.player.onFoot = false;
+    state.player.x = car.x;
+    state.player.y = car.y;
+    state.cars.push(car);
+    car.speed = 280;
+    for (let i = 0; i < 150; i += 1) stepWorld(state, STEP, autoInput(state, shot), autoMouse(state, shot));
+    state.msg = { text: 'THE PICKUP', sub: 'Drive to Pier 9, The Docks', until: state.time + 10 };
+  } else if (shot === 'foot') {
+    startMission(state, 0);
+    state.player.x = PLACES.plaza.x;
+    state.player.y = PLACES.plaza.y;
+    for (let i = 0; i < 120; i += 1) stepWorld(state, STEP, autoInput(state, shot), autoMouse(state, shot));
+    state.msg = { text: 'HOMECOMING', sub: "Go to Sal's Garage in Old Town", until: state.time + 10 };
+  } else {
+    startMission(state, 4);
+    state.player.x = PLACES.beachExchange.x - 60;
+    state.player.y = PLACES.beachExchange.y - 90;
     state.player.ammo = 48;
-    state.player.weapon = 'pistol';
-    world.setWanted(3);
-    world.spawnPolice();
-    const waypoints = [
-      { x: 1440, y: 1120 },
-      { x: 1440, y: 1440 },
-      { x: 1440, y: 1760 },
-      { x: 1440, y: 2080 },
-      { x: 1120, y: 2080 },
-      { x: 800, y: 2080 },
-      { x: 480, y: 2080 },
-      { x: 480, y: 2400 },
-      { x: 480, y: 2720 },
-    ];
-    let wp = 0;
-    for (let i = 0; i < CHASE_SECONDS / SAMPLE; i += 1) {
-      wp = steerCarTo(state, input, waypoints, wp);
-      if (world.step(SAMPLE, input) & EVENT_OVER) break;
-    }
-    return { screen: state.over ? SCREEN_OVER : SCREEN_PLAY, best: state.cash };
+    // Walk into the meet so the crew spawns, then hold the line.
+    for (let i = 0; i < 150; i += 1) stepWorld(state, STEP, autoInput(state, shot), autoMouse(state, shot));
+    state.msg = { text: 'AMBUSH', sub: '4 Kings crew — take them down', until: state.time + 10 };
   }
+  state.screen = 'play';
+  state.shotReady = true;
+}
 
-  // heist: the vault cash is grabbed, the alarm is up, cops are closing in.
-  state.missionIndex = 3;
-  state.stepIndex = 1;
-  state.cash = 5200;
-  state.player.ammo = 48;
-  state.player.weapon = 'pistol';
-  world.teleportPlayer(1280, 1370);
-  world.setWanted(3);
-  world.spawnPolice();
-  for (let i = 0; i < HEIST_SECONDS / SAMPLE; i += 1) {
-    // Run west along the bank's street, shooting at the nearest cop.
-    walkTo(state, input, 800, 1440);
-    let nearest = null;
-    let nearestD = 380 * 380;
-    for (const cop of state.cops) {
-      const d = (cop.x - state.player.x) ** 2 + (cop.y - state.player.y) ** 2;
-      if (d < nearestD) { nearestD = d; nearest = cop; }
-    }
-    if (nearest) {
-      input.aimX = nearest.x;
-      input.aimY = nearest.y;
-      input.shoot = true;
-    } else {
-      input.shoot = false;
-    }
-    if (world.step(SAMPLE, input) & EVENT_OVER) break;
-  }
-  return { screen: state.over ? SCREEN_OVER : SCREEN_PLAY, best: state.cash };
+// The live loop keeps the scene moving with the same autopilot.
+export function shotInput(state, stepWorld) {
+  void stepWorld;
+  return autoInput(state, state.shot);
+}
+
+export function shotMouse(state) {
+  return autoMouse(state, state.shot);
 }
